@@ -88,6 +88,8 @@ public class OSProjectPart2 {
     public static boolean appendLoadCheck(String incomingJob, ArrayBlockingQueue rQueue)
     {
         StringBuffer appendLoadTime = new StringBuffer(incomingJob);
+        String[] tokens;
+        tokens = incomingJob.split("\\s+");
         if(sched.aquireMemoryCheck(incomingJob))
         {
             appendLoadTime.append(" " + cpuTime);
@@ -104,6 +106,9 @@ public class OSProjectPart2 {
         File file = new File("src/osprojectpart2/18Sp-jobs"); //Incoming job file
         String line; //Line that holds incoming job to be checked
         ArrayBlockingQueue<String> readyQueue = new ArrayBlockingQueue<>(qCONSTRAINT); //Ready queue initialized with the constraint
+        ArrayBlockingQueue<String> IOqueue = new ArrayBlockingQueue<>(8);
+        ArrayBlockingQueue<String> balancedQueue = new ArrayBlockingQueue<>(8);
+        ArrayBlockingQueue<String> CPUqueue = new ArrayBlockingQueue<>(8);
         ArrayBlockingQueue<String> disk = new ArrayBlockingQueue<>(300); //Disk initialized with the constraint given by the assignment documentation
 
         //This chunk runs everything. J_SCHED runs first after the initial line is read in and sent to it.
@@ -130,35 +135,31 @@ public class OSProjectPart2 {
                             do 
                             {
                                 if (appendLoadCheck(disk.element(),readyQueue))
-                                {
+                                {  
                                     disk.take();
                                 }else //If no slot in memory open for job, it gets sent back to the disk to await its chance. In future builds, increase priority or summat.
-								{
+				{
                                     disk.add(disk.element());
                                     disk.take();
                                 }
                             } while (readyQueue.size() != qCONSTRAINT); 
                         }
 						
-						//If the disk isn't full, but still has something on it, then run this operation. But check if the ready queue is full as well, to see if it needs to be ran.
+                      //If the disk isn't full, but still has something on it, then run this operation. But check if the ready queue is full as well, to see if it needs to be ran.
                         if (readyQueue.size() != qCONSTRAINT) 
 						{
                             int diskCount = 0;
                             do 
-							{	//If no jobs on the disk are suitable for load, break out of the loop and run jobs on ready queue as per 0 arrival. If jobs are suitable, load.
+                            {	//If no jobs on the disk are suitable for load, break out of the loop and run jobs on ready queue as per 0 arrival. If jobs are suitable, load.
                                 if (diskCount == disk.size()) 
-								{
+				{
                                     break;
                                 }
-                                StringBuffer appendLoadTime = new StringBuffer(disk.element());
-                                String tempItem = disk.element();
-                                if (sched.aquireMemoryCheck(tempItem)) {
-                                    appendLoadTime.append("	" + cpuTime);
-                                    tempItem = appendLoadTime.toString();
-                                    readyQueue.add(tempItem);
+                                if (appendLoadCheck(disk.element(), readyQueue)) 
                                     disk.take();
-                                } else {
-                                    disk.add(tempItem);
+                                else 
+                                {
+                                    disk.add(disk.element());
                                     disk.take();
                                     diskCount++;
                                 }
@@ -192,16 +193,12 @@ public class OSProjectPart2 {
                                     if (diskCount == disk.size()) {
                                         break;
                                     }
-                                    StringBuffer appendLoadTime = new StringBuffer(disk.element());
-                                    String tempItem = disk.element();
-                                    if (sched.aquireMemoryCheck(tempItem)) {
-                                        appendLoadTime.append("	" + cpuTime);
-                                        tempItem = appendLoadTime.toString();
-                                        readyQueue.add(tempItem);
+
+                                    if(appendLoadCheck(disk.element(), readyQueue))
                                         disk.take();
-                                    } else //If job on disk can't be added to ready queue, pop it off top of the stack and send it to the back.
+                                     else //If job on disk can't be added to ready queue, pop it off top of the stack and send it to the back.
                                     {
-                                        disk.add(tempItem);
+                                        disk.add(disk.element());
                                         disk.take();
                                         diskCount++;
                                     }
@@ -215,8 +212,8 @@ public class OSProjectPart2 {
                                 disk.add(line);
                             }
 							
-							//Proceed with adding job to ready queue from disk since its not full
-							else
+			//Proceed with adding job to ready queue from disk since its not full
+                            else
                             {
                                 if (readyQueue.size() == qCONSTRAINT) //Empties readyQueue if its full coming into here
                                 {
@@ -225,8 +222,8 @@ public class OSProjectPart2 {
                                         it.remove();
                                     }
                                 }
-								//All calls like this prep for load time appendation if job is found to be suitable for load.
-                                StringBuffer appendLoadTimeD = new StringBuffer(disk.element()); 
+                            //All calls like this prep for load time appendation if job is found to be suitable for load.
+                               StringBuffer appendLoadTimeD = new StringBuffer(disk.element()); 
                                 String tempItemD = disk.element();
                                 if (sched.aquireMemoryCheck(tempItemD)) {
                                     appendLoadTimeD.append("	" + cpuTime);
@@ -235,15 +232,11 @@ public class OSProjectPart2 {
                                     disk.take();
                                     disk.add(line);
                                 } else {
-                                    if (sched.aquireMemoryCheck(line)) {
-                                        StringBuffer appendLoadTime = new StringBuffer(line);
-                                        String tempItem;
-                                        appendLoadTime.append("	" + cpuTime);
-                                        tempItem = appendLoadTime.toString();
-                                        readyQueue.add(tempItem);
-                                    } else {
+                                    if (appendLoadCheck(line, readyQueue)) 
+                                    {
+                                       
+                                    } else 
                                         disk.add(line);
-                                    }
                                 }
                             }
                         } else //If the disk IS empty, come here to attempt to add incoming line to either ready queue or the disk.
@@ -306,7 +299,6 @@ public class OSProjectPart2 {
         {
             ex.printStackTrace(System.out);
         }
-
         //Final output chunk of text
         System.out.println("\nNumber of jobs processed: " + jobsProcessed);
         System.out.println("Number of CPU-bound jobs: " + cpuJobCount);

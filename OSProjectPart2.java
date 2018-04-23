@@ -16,7 +16,6 @@ Global Variables: J_SCHED sched - this is the job scheduler class that properly 
 				  qCONSTRAINT - The hardcap on memory availability
 				  
 File description: Main protocol for the scheduler, takes input from the incoming job file and calls appropriate methods and functions (J_SCHED, J_DISPATCH, J_TERM) according to input.
-
 Possible improvements: A pretty bad way of handling the 0 jobs that got loaded to disk and subsequently memory/execution. Checks built in for such a thing don't work properly, and
 would require more time than alloted to fix. The previous version I turned in also had some pretty grievous logic errors regarding the actual logic in properly scheduling and running
 of jobs.
@@ -185,6 +184,36 @@ public class OSProjectPart2 {
         else
             return false;
     }
+    
+    public static void timeCheck(ArrayBlockingQueue<String> IOqueue, ArrayBlockingQueue<String> otherQueue, int timeLimit)
+    {
+        for(Iterator<String> it = otherQueue.iterator(); it.hasNext();)
+        {
+           String temp = it.next();
+           ArrayList<String> b_tokens = new ArrayList<String>();
+           b_tokens = new ArrayList<String>(Arrays.asList(temp.split("\\s+")));
+           if(b_tokens.size() == 10)
+            {
+               if(cpuTime - Integer.parseInt(b_tokens.get(9)) >= timeLimit)
+               {
+                  if(Integer.parseInt(b_tokens.get(7)) < 5)
+                  {
+                     b_tokens.set(7, Integer.toString(Integer.parseInt(b_tokens.get(7)) + 1));
+                  }
+                  else if(Integer.parseInt(b_tokens.get(7)) == 5)
+                  {
+                     if(IOqueue.size() < qCONSTRAINT2 && IOqueue.size() != qCONSTRAINT2)
+                     {
+                        IOqueue.add(temp);
+                        it.remove();
+                    }
+                    else
+                      continue; //Temporary measure until I figure out what breaks when this don't run
+                  }
+                }
+            }
+        }
+    }
 
     public static void main(String[] args) throws InterruptedException, IOException {
         //File file = new File("/home/opsys/OS-I/18Sp-jobs");
@@ -214,8 +243,8 @@ public class OSProjectPart2 {
                         {
                             if (readyQueue.size() == qCONSTRAINT) //Empties subqueues if its full coming into here. (Needs to empty all 3 subqueues if they're full)
                             {
-                                /*
-                                    if(IOqueue.size() == qCONSTRAINT2) //Contingency to empty queue for filling if its full up
+                                
+                                   /* if(IOqueue.size() == qCONSTRAINT2) //Contingency to empty queue for filling if its full up
                                     {
                                         for(Iterator<String> it = IOqueue.iterator(); it.hasNext();)
                                         {
@@ -224,6 +253,11 @@ public class OSProjectPart2 {
                                             it.remove();
                                             if(input != null)
                                             {
+                                
+                                                //checks how long its been since jobs in balanced queue got a chance to run, update priority and put into IOqueue if its been over 400 time units
+                                                timeCheck(IOqueue, balancedQueue, 400);
+                                                timeCheck(IOqueue, CPUqueue, 600);
+                                                    
                                                 ArrayList<String> tokens = new ArrayList<String>();
                                                 tokens = new ArrayList<String>(Arrays.asList(input.split("\\s+")));
                                                 if(tokens.get(2).equals("1"))
@@ -232,19 +266,6 @@ public class OSProjectPart2 {
                                                     balancedQueue.add(input); //Probably need some check to see if its full
                                                 else if(tokens.get(2).equals("3"))
                                                     IOqueue.add(input); //Should be fine on the check since its literally sticking its shit back in the queue after popping it out
-                                
-                                                //something something check how long its been since the jobs in CPU and balanced queue have run
-                                                for(Iterator<String> it2 = balancedQueue.iterator(); it2.hasNext();)
-                                                {
-                                                    String temp = it2.next();
-                                                    ArrayList<String> b_tokens = new ArrayList<String>();
-                                                    b_tokens = new ArrayList<String>(Arrays.asList(temp.split("\\s+")));
-                                                    if(b_tokens.size() == 10)
-                                                    {
-                                                        if() //Convert b_tokens.get(9) to an int and subtract it from the current lastest cpuTime after a job has ran. if the result is less than or equal to 400, bump its priority up 1
-                                                             //If the priority is equal to 5, bump it into the IOqueue.
-                                                    }
-                                                }   
                                             }
                                         }
                                     }//*/

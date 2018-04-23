@@ -25,14 +25,14 @@ of jobs.
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-
+import java.util.HashMap;
+import java.util.Map;
 public class OSProjectPart2 {
 
     public static J_SCHED sched = new J_SCHED();
     public static int jobsProcessed;
     public static int cpuJobCount, ioJobCount, balancedJobCount, totalTurnaround, totalWaitTime, rejectCount, totalProcess, cpuTime;
-    public static final int qCONSTRAINT = 26;
+    public static final int qCONSTRAINT = 26, qCONSTRAINT2 = 9;
 
     //Job termination function. Documents and outputs job termination statistics, and purges the appropriate queues upon termination.
     public static void J_TERM(String finishedJob) 
@@ -64,6 +64,9 @@ public class OSProjectPart2 {
             System.out.println("Memory needed to run: " + term_tokens[3] + " bytes.");
             System.out.println("Turnaround time: " + tat_time + " milliseconds.");
             System.out.println("Waiting time: " + wait_time + " milliseconds.");
+            System.out.println("Traffic Count: " + term_tokens[8]);
+            System.out.println("Priority at Termination: " + term_tokens[7]);
+            System.out.println("Something: " + term_tokens[9]);
             sched.releaseMemory(finishedJob); //Inputs job string to release memory after execution
             totalTurnaround += tat_time;
             totalWaitTime += wait_time;
@@ -74,11 +77,84 @@ public class OSProjectPart2 {
 
     //Executes/processes incoming job from ready queue
     public static void J_DISPATCH(String arrivingJob) 
-	{
-        String[] dispatch_tokens; //Array to hold to-be tokenized
-        dispatch_tokens = arrivingJob.split("\\s+"); //Tokenizes executing job string
-        try {
-            cpuTime += Integer.parseInt(dispatch_tokens[4]);
+    {
+       ArrayList<String> dispatch_tokens = new ArrayList<String>(); //ArrayList to hold to-be tokenized PCB
+        dispatch_tokens = new ArrayList<String>(Arrays.asList(arrivingJob.split("\\s+"))); //Tokenizes executing job string
+        HashMap<String, Integer> processTimer = new HashMap<>();
+        int processedTime = 0;
+        try 
+        {
+            /*
+              if(dispatch_tokens.get(1).equals("1"))
+              {
+                    if(dispatch_tokens.get(7).equals("0"))
+                    {
+                    }
+                    else
+                        dispatch_tokens.set(7, Integer.toString(Integer.parseInt(dispatch_tokens.get(7)) - 1)); //Decrements the priority of the job
+              } 
+              else if(dispatch_tokens.get(1).equals("2"))
+              {
+                  if(dispatch_tokens.get(7).equals("1"))
+                    {
+                    }
+                    else
+                        dispatch_tokens.set(7, Integer.toString(Integer.parseInt(dispatch_tokens.get(7)) - 1));
+              }
+              else
+                  dispatch_tokens.set(7, Integer.toString(Integer.parseInt(dispatch_tokens.get(7)) - 1));
+              
+              if(processTimer.containsKey(dispatch_tokens.get(1))) //Checks to see if job id exists already
+              {
+                 //If job id is found in hashmap processTimer, retrieve remaining processing time from processTimer and subtract relevant time quantum from it.
+                 processedTime = processTimer.get(dispatch_tokens.get(1));
+                 if(dispatch_tokens.get(2).equals("1"))
+                     processedTime -= 75;
+                 else if(dispatch_tokens.get(2).equals("2"))
+                     processedTime -= 40;
+                 else if(dispatch_tokens.get(2).equals("3"))
+                     processedTime -= 20;
+              }
+              else
+              {
+                //If job id is not found in hashmap processTimer, retrieve processing time from PCB and subtract relevant time quantum from processing time.
+                if(dispatch_tokens.get(2).equals("1"))
+                      processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 75);
+                else if(dispatch_tokens.get(2).equals("2"))
+                      processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 40);
+                else if(dispatch_tokens.get(2).equals("3"))
+                      processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 20);
+              }
+            
+              if(processedTime <= 0) //Checks to see if, after subtracting the time quantum, if the job is finished processing or not.
+              {
+                    //If job is finished processing, terminate it to remove it from memory and remove it from processTimer. Increment cpu clock by relevant time quantum.
+                    //J_TERM(arrivingJob);
+                    processTimer.remove(dispatch_tokens.get(1));
+                    if(dispatch_tokens.get(2).equals("1"))
+                        cpuTime += 75;
+                    else if(dispatch_tokens.get(2).equals("2"))
+                        cpuTime += 40;
+                    else if(dispatch_tokens.get(2).equals("3"))
+                        cpuTime += 20;
+                    //return null;
+              }
+              else
+              {
+                  processTimer.put(dispatch_tokens.get(1), processedTime);
+                  if(dispatch_tokens.get(2).equals("1"))
+                      cpuTime += 75;
+                  else if(dispatch_tokens.get(2).equals("2"))
+                      cpuTime += 40;
+                  else if(dispatch_tokens.get(2).equals("3"))
+                      cpuTime += 20;
+                  
+                  if(dispatch_tokens.size() == 10)
+                      dispatch_tokens.set(9, Integer.toString(cpuTime));       
+                  //return String.join(" ", dispatch_tokens);
+              }
+           // */
+            cpuTime += Integer.parseInt(dispatch_tokens.get(4));
             J_TERM(arrivingJob); //Calls after job 'execution' to output termination stats
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -92,7 +168,16 @@ public class OSProjectPart2 {
         tokens = incomingJob.split("\\s+");
         if(sched.aquireMemoryCheck(incomingJob))
         {
-            appendLoadTime.append(" " + cpuTime);
+            appendLoadTime.append(" " + cpuTime); //Appends load time
+            if(tokens[2].equals("1"))
+                appendLoadTime.append(" " + "0"); //Appends Priority
+            else if(tokens[2].equals("2"))
+                appendLoadTime.append(" " + "1");
+            else if(tokens[2].equals("3"))
+                appendLoadTime.append(" " + "5");
+            
+            appendLoadTime.append(" " + "1"); //Appends traffic count
+            appendLoadTime.append(" " + Integer.toString(cpuTime)); //Appends time for job priority time check
             incomingJob = appendLoadTime.toString();
             rQueue.add(incomingJob);
             return true;
@@ -106,9 +191,9 @@ public class OSProjectPart2 {
         File file = new File("src/osprojectpart2/18Sp-jobs"); //Incoming job file
         String line; //Line that holds incoming job to be checked
         ArrayBlockingQueue<String> readyQueue = new ArrayBlockingQueue<>(qCONSTRAINT); //Ready queue initialized with the constraint
-        ArrayBlockingQueue<String> IOqueue = new ArrayBlockingQueue<>(8);
-        ArrayBlockingQueue<String> balancedQueue = new ArrayBlockingQueue<>(8);
-        ArrayBlockingQueue<String> CPUqueue = new ArrayBlockingQueue<>(8);
+        ArrayBlockingQueue<String> IOqueue = new ArrayBlockingQueue<>(qCONSTRAINT2);
+        ArrayBlockingQueue<String> balancedQueue = new ArrayBlockingQueue<>(qCONSTRAINT2);
+        ArrayBlockingQueue<String> CPUqueue = new ArrayBlockingQueue<>(qCONSTRAINT2);
         ArrayBlockingQueue<String> disk = new ArrayBlockingQueue<>(300); //Disk initialized with the constraint given by the assignment documentation
 
         //This chunk runs everything. J_SCHED runs first after the initial line is read in and sent to it.
@@ -123,21 +208,59 @@ public class OSProjectPart2 {
 
                 if (sched.idCheck(line) == false) //checks if job id is 0, if so then fills ready queue from disk and calls J_DISPATCH to run.
                 {                                //Returns false if no 0, true if there is a 0                      
-                    if (disk.isEmpty() == false) {
-                        if (disk.size() == 300) {
-                            if (readyQueue.size() == qCONSTRAINT) //Empties readyQueue if its full coming into here
+                    if (disk.isEmpty() == false) 
+                    {
+                        if (disk.size() == 300) 
+                        {
+                            if (readyQueue.size() == qCONSTRAINT) //Empties subqueues if its full coming into here. (Needs to empty all 3 subqueues if they're full)
                             {
-                                for (Iterator<String> it = readyQueue.iterator(); it.hasNext();) {
+                                /*
+                                    if(IOqueue.size() == qCONSTRAINT2) //Contingency to empty queue for filling if its full up
+                                    {
+                                        for(Iterator<String> it = IOqueue.iterator(); it.hasNext();)
+                                        {
+                                            String input;
+                                            input = J_DISPATCH(it.next());
+                                            it.remove();
+                                            if(input != null)
+                                            {
+                                                ArrayList<String> tokens = new ArrayList<String>();
+                                                tokens = new ArrayList<String>(Arrays.asList(input.split("\\s+")));
+                                                if(tokens.get(2).equals("1"))
+                                                    CPUqueue.add(input); //Probably need some check to see if its full
+                                                else if(tokens.get(2).equals("2"))
+                                                    balancedQueue.add(input); //Probably need some check to see if its full
+                                                else if(tokens.get(2).equals("3"))
+                                                    IOqueue.add(input); //Should be fine on the check since its literally sticking its shit back in the queue after popping it out
+                                
+                                                //something something check how long its been since the jobs in CPU and balanced queue have run
+                                                for(Iterator<String> it2 = balancedQueue.iterator(); it2.hasNext();)
+                                                {
+                                                    String temp = it2.next();
+                                                    ArrayList<String> b_tokens = new ArrayList<String>();
+                                                    b_tokens = new ArrayList<String>(Arrays.asList(temp.split("\\s+")));
+                                                    if(b_tokens.size() == 10)
+                                                    {
+                                                        if() //Convert b_tokens.get(9) to an int and subtract it from the current lastest cpuTime after a job has ran. if the result is less than or equal to 400, bump its priority up 1
+                                                             //If the priority is equal to 5, bump it into the IOqueue.
+                                                    }
+                                                }   
+                                            }
+                                        }
+                                    }//*/
+                                
+                                for (Iterator<String> it = readyQueue.iterator(); it.hasNext();) 
+                                {
                                     J_DISPATCH(it.next());
                                     it.remove();
                                 }
                             }
+                            
                             do 
                             {
-                                if (appendLoadCheck(disk.element(),readyQueue))
-                                {  
+                                if (appendLoadCheck(disk.element(),readyQueue)) //Need to check Job ID here for slotting into appropriate queue
                                     disk.take();
-                                }else //If no slot in memory open for job, it gets sent back to the disk to await its chance. In future builds, increase priority or summat.
+                                else //If no slot in memory open for job, it gets sent back to the disk to await its chance. In future builds, increase priority or summat.
 				{
                                     disk.add(disk.element());
                                     disk.take();
@@ -155,7 +278,7 @@ public class OSProjectPart2 {
 				{
                                     break;
                                 }
-                                if (appendLoadCheck(disk.element(), readyQueue)) 
+                                if (appendLoadCheck(disk.element(), readyQueue)) //Need to check job ID here
                                     disk.take();
                                 else 
                                 {
@@ -194,7 +317,7 @@ public class OSProjectPart2 {
                                         break;
                                     }
 
-                                    if(appendLoadCheck(disk.element(), readyQueue))
+                                    if(appendLoadCheck(disk.element(), readyQueue)) //Need to check job ID here
                                         disk.take();
                                      else //If job on disk can't be added to ready queue, pop it off top of the stack and send it to the back.
                                     {
@@ -222,22 +345,20 @@ public class OSProjectPart2 {
                                         it.remove();
                                     }
                                 }
-                            //All calls like this prep for load time appendation if job is found to be suitable for load.
-                               StringBuffer appendLoadTimeD = new StringBuffer(disk.element()); 
-                                String tempItemD = disk.element();
-                                if (sched.aquireMemoryCheck(tempItemD)) {
-                                    appendLoadTimeD.append("	" + cpuTime);
-                                    tempItemD = appendLoadTimeD.toString();
-                                    readyQueue.add(tempItemD);
-                                    disk.take();
-                                    disk.add(line);
-                                } else {
-                                    if (appendLoadCheck(line, readyQueue)) 
-                                    {
+
+                              if(appendLoadCheck(disk.element(), readyQueue))
+                              {
+                                  disk.take();
+                                  disk.add(line);
+                              }
+                              else
+                              {
+                                if (appendLoadCheck(line, readyQueue)) //Need to check job ID here
+                                 {
                                        
-                                    } else 
-                                        disk.add(line);
-                                }
+                                 } else 
+                                    disk.add(line);
+                              }
                             }
                         } else //If the disk IS empty, come here to attempt to add incoming line to either ready queue or the disk.
                         {
@@ -248,17 +369,13 @@ public class OSProjectPart2 {
                                     it.remove();
                                 }
                             }
-
-                            if (sched.aquireMemoryCheck(line)) //Checks if new incoming job is good to load. If not, throws it on the disk.
-							{
-                                StringBuffer appendLoadTime = new StringBuffer(line);
-                                String tempItem;
-                                appendLoadTime.append("	" + cpuTime);
-                                tempItem = appendLoadTime.toString();
-                                readyQueue.add(tempItem);
-                            } else {
-                                disk.add(line);
-                            }
+                           
+                           if(appendLoadCheck(line, readyQueue))
+                           {
+                               
+                           }
+                           else
+                               disk.add(line);
                         }
                     }
                 }
@@ -268,17 +385,15 @@ public class OSProjectPart2 {
             while (disk.isEmpty() == false) //Empties disk after job input has ceased
             {
                 String arrival = disk.take();
-                String loaded;
-
                 while (readyQueue.isEmpty() == false) {
                     J_DISPATCH(readyQueue.take());
                 }
-                if (sched.aquireMemoryCheck(arrival)) {
-                    StringBuffer appendLoadTime = new StringBuffer(arrival);
-                    appendLoadTime.append("	" + cpuTime);
-                    loaded = appendLoadTime.toString();
-                    readyQueue.add(loaded);
-                } else {
+                if(appendLoadCheck(arrival, readyQueue))
+                {
+                    
+                }
+                else
+                {
                     disk.add(arrival);
                     disk.take();
                 }
@@ -308,5 +423,7 @@ public class OSProjectPart2 {
         System.out.println("Average wait time: " + Math.abs(totalWaitTime / jobsProcessed) + " milliseconds.");
         System.out.println("Number of rejected jobs: " + rejectCount);
         System.out.println("Total processing time of CPU clock: " + cpuTime);
+        //System.out.println("Average internal fragmentation: ");
+        //System.out.println("Total external fragmentation: ");
     }
 }

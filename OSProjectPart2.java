@@ -160,7 +160,7 @@ public class OSProjectPart2 {
         }
     }
     
-    public static boolean appendLoadCheck(String incomingJob, ArrayBlockingQueue rQueue)
+    public static boolean appendLoadCheck(String incomingJob, Queue rQueue)
     {
         StringBuffer appendLoadTime = new StringBuffer(incomingJob);
         String[] tokens;
@@ -185,7 +185,7 @@ public class OSProjectPart2 {
             return false;
     }
     
-    public static void timeCheck(ArrayBlockingQueue<String> IOqueue, ArrayBlockingQueue<String> otherQueue, int timeLimit)
+    public static void timeCheck(Queue<String> IOqueue, Queue<String> otherQueue, int timeLimit)
     {
         for(Iterator<String> it = otherQueue.iterator(); it.hasNext();)
         {
@@ -204,6 +204,7 @@ public class OSProjectPart2 {
                   {
                      if(IOqueue.size() < qCONSTRAINT2 && IOqueue.size() != qCONSTRAINT2)
                      {
+                        //Increment the 'traffic count' since the job is switching queues.
                         IOqueue.add(temp);
                         it.remove();
                     }
@@ -220,9 +221,9 @@ public class OSProjectPart2 {
         File file = new File("src/osprojectpart2/18Sp-jobs"); //Incoming job file
         String line; //Line that holds incoming job to be checked
         ArrayBlockingQueue<String> readyQueue = new ArrayBlockingQueue<>(qCONSTRAINT); //Ready queue initialized with the constraint
-        ArrayBlockingQueue<String> IOqueue = new ArrayBlockingQueue<>(qCONSTRAINT2);
-        ArrayBlockingQueue<String> balancedQueue = new ArrayBlockingQueue<>(qCONSTRAINT2);
-        ArrayBlockingQueue<String> CPUqueue = new ArrayBlockingQueue<>(qCONSTRAINT2);
+        Queue<String> IOqueue = new LinkedList<String>();
+        Queue<String> balancedQueue = new LinkedList<String>();
+        Queue<String> CPUqueue = new LinkedList<String>();
         ArrayBlockingQueue<String> disk = new ArrayBlockingQueue<>(300); //Disk initialized with the constraint given by the assignment documentation
 
         //This chunk runs everything. J_SCHED runs first after the initial line is read in and sent to it.
@@ -243,32 +244,57 @@ public class OSProjectPart2 {
                         {
                             if (readyQueue.size() == qCONSTRAINT) //Empties subqueues if its full coming into here. (Needs to empty all 3 subqueues if they're full)
                             {
-                                
-                                   /* if(IOqueue.size() == qCONSTRAINT2) //Contingency to empty queue for filling if its full up
+                                //Current idea is to remove limits on queues and implement a 'full check' function that sees if all memory is currently taken. If so, no other jobs are allowed in until all jobs in queue are finished running
+                                   /* if(sched.mem_full_check()) //Contingency to empty queue for filling if its full up
                                     {
-                                        for(Iterator<String> it = IOqueue.iterator(); it.hasNext();)
+                                        for(Iterator<String> it2 = IOqueue.iterator(); it2.hasNext();) //Potential issue: May cause exception for changing queue while iterating through it.
                                         {
                                             String input;
-                                            input = J_DISPATCH(it.next());
-                                            it.remove();
+                                            input = J_DISPATCH(it2.next());
+                                            it2.remove();
                                             if(input != null)
                                             {
-                                
-                                                //checks how long its been since jobs in balanced queue got a chance to run, update priority and put into IOqueue if its been over 400 time units
                                                 timeCheck(IOqueue, balancedQueue, 400);
                                                 timeCheck(IOqueue, CPUqueue, 600);
-                                                    
+                                
                                                 ArrayList<String> tokens = new ArrayList<String>();
-                                                tokens = new ArrayList<String>(Arrays.asList(input.split("\\s+")));
+                                                tokens = new ArrayList(Arrays.asList(input.split("\\s+")));
                                                 if(tokens.get(2).equals("1"))
-                                                    CPUqueue.add(input); //Probably need some check to see if its full
+                                                    CPUqueue.add(input);
                                                 else if(tokens.get(2).equals("2"))
-                                                    balancedQueue.add(input); //Probably need some check to see if its full
+                                                    balancedQueue.add(input);
                                                 else if(tokens.get(2).equals("3"))
-                                                    IOqueue.add(input); //Should be fine on the check since its literally sticking its shit back in the queue after popping it out
+                                                    IOqueue.add(input);
                                             }
+                                            else if(input == null)
+                                            {
+                                                timeCheck(IOqueue, balancedQueue, 400);
+                                                timeCheck(IOqueue, CPUqueue, 600);
+                                            }       
+                                         }  
+                                     }
+                                    
+                                    do
+                                    {
+                                        ArrayList<String> tokens = new ArrayList<String>();
+                                        tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
+                                        if(tokens.get(2).equals("1"))
+                                        {
+                                            appendLoadCheck(disk.element(), CPUqueue);
+                                            disk.remove();
                                         }
-                                    }//*/
+                                        else if(tokens.get(2).equals("2"))
+                                        {
+                                            appendLoadCheck(disk.element(), balancedQueue);
+                                            disk.remove();
+                                        }
+                                        else if(tokens.get(2).equals("3"))
+                                        {
+                                            appendLoadCheck(disk.element(), IOqueue);
+                                            disk.remove();
+                                        }
+                                    } while(sched.mem_full_check() != true);//*/
+                                       
                                 
                                 for (Iterator<String> it = readyQueue.iterator(); it.hasNext();) 
                                 {
@@ -291,7 +317,61 @@ public class OSProjectPart2 {
 						
                       //If the disk isn't full, but still has something on it, then run this operation. But check if the ready queue is full as well, to see if it needs to be ran.
                         if (readyQueue.size() != qCONSTRAINT) 
-						{
+                        {
+			/*if(sched.mem_full_check() != true) //For now, may not need the extra diskCount setup, but need to test
+                        {
+                            int diskCount = 0;
+                            do
+                            {
+                                if(diskCount == disk.size())
+                                {
+                                    break;
+                                }
+                                ArrayList<String> tokens = new ArrayList<String>();
+                                tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
+                                if(tokens.get(2).equals("1"))
+                                {
+                                     appendLoadCheck(disk.element(), CPUqueue);
+                                    disk.take();
+                                }
+                                else if(tokens.get(2).equals("2"))
+                                {
+                                    appendLoadCheck(disk.element(), balancedQueue);
+                                    disk.take();
+                                }
+                                else if(tokens.get(2).equals("3"))
+                                {
+                                    appendLoadCheck(disk.element(), IOqueue);
+                                    disk.take();
+                                }
+                            } while(sched.mem_full_check() != true);
+                            
+                            for(Iterator<String> it2 = IOqueue.iterator(); it2.hasNext();) //Potential issue: May cause exception for changing queue while iterating through it.
+                            {                                                              //Another potential issue: Need to check if queues are EMPTY before running dispatch programs 
+                               String input;
+                               input = J_DISPATCH(it2.next());
+                               it2.remove();
+                               if(input != null)
+                                {
+                                  timeCheck(IOqueue, balancedQueue, 400);
+                                  timeCheck(IOqueue, CPUqueue, 600);
+                                
+                                  ArrayList<String> tokens = new ArrayList<String>();
+                                  tokens = new ArrayList(Arrays.asList(input.split("\\s+")));
+                                  if(tokens.get(2).equals("1"))
+                                       CPUqueue.add(input);
+                                  else if(tokens.get(2).equals("2"))
+                                        balancedQueue.add(input);
+                                  else if(tokens.get(2).equals("3"))
+                                        IOqueue.add(input);
+                                }
+                                else if(input == null)
+                                {
+                                    timeCheck(IOqueue, balancedQueue, 400);
+                                    timeCheck(IOqueue, CPUqueue, 600);
+                                }
+                        }
+                        //*/
                             int diskCount = 0;
                             do 
                             {	//If no jobs on the disk are suitable for load, break out of the loop and run jobs on ready queue as per 0 arrival. If jobs are suitable, load.
@@ -324,7 +404,7 @@ public class OSProjectPart2 {
                         if (disk.isEmpty() == false) //If the disk isn't empty, give it priority over incoming jobs to ready queue
                         {
                             if (disk.size() == 300) //Checks if the disk is full in order to avoid memory limitations.
-							{
+                            {
                                 for (Iterator<String> it = readyQueue.iterator(); it.hasNext();) //If it is, immediately run any jobs and proceed to give
                                 {
                                     J_DISPATCH(it.next());

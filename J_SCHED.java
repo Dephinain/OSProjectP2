@@ -1,8 +1,11 @@
+
+
 /*
 File Description: This is the Job Scheduler proper, where all decisions regarding whether or not it's loaded to the ready queue, the disk, or not loaded at all take place.
 
 Job mix explanation: During my testing of this program, I opted to go for a 'process everything as it comes in' approach after previous attempts at a IO -> balanced -> CPU job(highest priority at left)priority structure ended up with the program spending a not-insignificant amount of time simply trying to queue up IO and balanced marked jobs. For a smaller job list, my implementation may have worked, but considering the sheer amount of CPU jobs vs
 the other types of jobs, I felt it prudent to just process everything as it came in, which lessened run time considerably.
+Changes made in phase 2 - Added a new function 'mem_full_check' that pokes mem_manager to see if all the memory is currently taken, and
 
 Possible Imrpovement: The idCheck function doesn't properly work correctly when it comes to actually keeping 0 - or empty - jobs off the actual readyQueue and disk. Could be better implemented, but it does its job
 in actually checking that a 0/empty job has come in, and to run the protocols outlined in the project documentation.
@@ -37,7 +40,7 @@ public class J_SCHED
 			memoryArr[6] = new boolean[1];
 			initialize(memoryArr);
 		};
-		//Note: tokens[1-6] represent the following: Job ID(1), class of Job(2), requested memory(3), processing time(4), arrival time(5), time job was loaded to ready queue(6).
+		//Note: tokens[1-8] represent the following: Job ID(1), class of Job(2), requested memory(3), processing time(4), arrival time(5), time job was loaded to ready queue(6), job priority(7), and traffic count(8)
 		private static mem_manager manager = new mem_manager(memoryArr); //Creates an instance of mem_manager for properly allocating and deallocating memory
 		
 		public static boolean aquireMemoryCheck(String inputLine) //Checks with mem_manager to see if any memory available. If so, replies to main program to insert it into the queue.
@@ -85,6 +88,20 @@ public class J_SCHED
 			else
 				return false;
 		}
+                
+                public static boolean mem_full_check()
+                {
+                    if(manager.isFull())
+                        return true;
+                    else
+                        return false;
+                }
+                
+                public static void printFragmentationStats(double input)
+                {
+                    manager.printExternal(input);
+                }
+                
 		public static void main(String[] args)
 		{
 		}

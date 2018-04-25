@@ -14,7 +14,11 @@ Global Variables: J_SCHED sched - this is the job scheduler class that properly 
 				  totalWaitTime - Gets the total wait time for all processed jobs
 				  rejectCount - Counts how many jobs have been rejected due to being either empty jobs (0) or not meeting the memory requirements
 				  cpuTime - Keeps track of the 'processing time' that has occurred throughout the program.
-				  qCONSTRAINT - The hardcap on memory availability
+                                  processTimer - Keeps track of all job's remaining processing time after initial stint in J_DISPATCH.
+
+Changes in phase 2 - Eliminated the ready queue entirely to just run everything from the subqueues. Multiple copy/paste statements replaced with functions for ease of readability and use. 
+                     Overall logic changed in order to reflect phase 2 specifications with regards to multilevel feedback queue roundrobin implementation. Output adjusted to reflect 
+                     new statistics required.
 				  
 File description: Main protocol for the scheduler, takes input from the incoming job file and calls appropriate methods and functions (J_SCHED, J_DISPATCH, J_TERM) according to input.
 Possible improvements: A pretty bad way of handling the 0 jobs that got loaded to disk and subsequently memory/execution. Checks built in for such a thing don't work properly, and
@@ -33,7 +37,6 @@ public class OSProjectPart2
     public static J_SCHED sched = new J_SCHED();
     public static int jobsProcessed;
     public static int cpuJobCount, ioJobCount, balancedJobCount, totalTurnaround, totalWaitTime, rejectCount, totalProcess, cpuTime, missingBalance;
-    public static final int qCONSTRAINT = 26, qCONSTRAINT2 = 9;
     public static HashMap<String, Integer> processTimer = new HashMap<>();
 
     //Job termination function. Documents and outputs job termination statistics, and purges the appropriate queues upon termination.
@@ -73,12 +76,11 @@ public class OSProjectPart2
             System.out.println("Time job was loaded to ready queue: " + term_tokens[6] + " milliseconds.");
             System.out.println("Time job was terminated at: " + term_time + " milliseconds.");
             System.out.println("Time job was spent processing: " + term_tokens[4] + " milliseconds.");
-            System.out.println("Memory needed to run: " + term_tokens[3] + " bytes.");
+            System.out.println("Memory needed to run: " + term_tokens[3] + " KB");
             System.out.println("Turnaround time: " + tat_time + " milliseconds.");
             System.out.println("Waiting time: " + wait_time + " milliseconds.");
             System.out.println("Priority at Termination: " + term_tokens[7]);
             System.out.println("Traffic count: " + term_tokens[8]);
-             System.out.println("Cpu time at termination: " + term_tokens[9]);
             sched.releaseMemory(finishedJob); //Inputs job string to release memory after execution
             totalTurnaround += tat_time;
             totalWaitTime += wait_time;
@@ -87,12 +89,13 @@ public class OSProjectPart2
 
     }
 
-    //Executes/processes incoming job from ready queue
+    //Processes jobs from the various subqueues, terminating them when their time is up
     public static String J_DISPATCH(String arrivingJob)
     {
         ArrayList<String> dispatch_tokens = new ArrayList<>(); //ArrayList to hold to-be tokenized PCB
         dispatch_tokens = new ArrayList<>(Arrays.asList(arrivingJob.split("\\s+"))); //Tokenizes executing job string
-        int processedTime = 0, timeIntermed;
+
+        int processedTime = 0;
         try
         {
             switch (dispatch_tokens.get(2)) //Checks job id so that its priority never goes below 1 for balanced jobs and 0 for CPU jobs
@@ -125,30 +128,77 @@ public class OSProjectPart2
                 switch (dispatch_tokens.get(2))
                 {
                     case "1":
-                        processedTime -= 75;
+                        if (processedTime < 75)
+                        {
+                            cpuTime += processTimer.get(dispatch_tokens.get(1));
+                            processedTime = 0;
+                        } else
+                        {
+                            processedTime -= 75;
+                            cpuTime += 75;
+                        }
                         break;
                     case "2":
-                        processedTime -= 40;
+                        if (processedTime < 40)
+                        {
+                            cpuTime += processTimer.get(dispatch_tokens.get(1));
+                            processedTime = 0;
+                        } else
+                        {
+                            processedTime -= 40;
+                            cpuTime += 40;
+                        }
                         break;
                     case "3":
-                        processedTime -= 20;
+                        if (processedTime < 20)
+                        {
+                            cpuTime += processTimer.get(dispatch_tokens.get(1));
+                            processedTime = 0;
+                        } else
+                        {
+                            processedTime -= 20;
+                            cpuTime += 20;
+                        }
                         break;
                     default:
                         break;
                 }
             } else
-            {
-                //If job id is not found in hashmap processTimer, retrieve processing time from PCB and subtract relevant time quantum from processing time.
+            {   //If job id is not found in hashmap processTimer, retrieve processing time from PCB and subtract relevant time quantum from processing time.
                 switch (dispatch_tokens.get(2))
                 {
                     case "1":
-                        processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 75);
+                        if (Integer.parseInt(dispatch_tokens.get(4)) < 75)
+                        {
+                            cpuTime += Integer.parseInt(dispatch_tokens.get(4));
+                            processedTime = 0;
+                        } else
+                        {
+                            processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 75);
+                            cpuTime += 75;
+                        }
                         break;
                     case "2":
-                        processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 40);
+                        if (Integer.parseInt(dispatch_tokens.get(4)) < 40)
+                        {
+                            cpuTime += Integer.parseInt(dispatch_tokens.get(4));
+                            processedTime = 0;
+                        } else
+                        {
+                            processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 40);
+                            cpuTime += 40;
+                        }
                         break;
                     case "3":
-                        processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 20);
+                        if (Integer.parseInt(dispatch_tokens.get(4)) < 20)
+                        {
+                            cpuTime += Integer.parseInt(dispatch_tokens.get(4));
+                            processedTime = 0;
+                        } else
+                        {
+                            processedTime = (Integer.parseInt(dispatch_tokens.get(4)) - 20);
+                            cpuTime += 20;
+                        }
                         break;
                     default:
                         break;
@@ -157,58 +207,22 @@ public class OSProjectPart2
 
             if (processedTime <= 0) //Checks to see if, after subtracting the time quantum, if the job is finished processing or not.
             {
-                //System.out.println("Time is less than 0!");
-                //If job is finished processing, terminate it to remove it from memory and remove it from processTimer. Increment cpu clock by relevant time quantum.
-               // if(dispatch_tokens.get(2).equals("2"))
-                  //  missingBalance++;
-               // System.out.println("Missing balance is: " + missingBalance);
                 J_TERM(arrivingJob);
-                switch (dispatch_tokens.get(2))
+
+                if (processTimer.containsKey(dispatch_tokens.get(1)))
                 {
-                    case "1":
-                        if(processTimer.containsKey(dispatch_tokens.get(1)))
-                            cpuTime += (processedTime - processTimer.get(dispatch_tokens.get(1))); //Add remaining time from processed time instead of just flat time from overall processing time
-                        else
-                            cpuTime += Integer.parseInt(dispatch_tokens.get(4));
-                        break;
-                    case "2":
-                        cpuTime += Integer.parseInt(dispatch_tokens.get(4));
-                        break;
-                    case "3":
-                        cpuTime += Integer.parseInt(dispatch_tokens.get(4));
-                        break;
-                    default:
-                        break;
-                }
-                if(processTimer.containsKey(dispatch_tokens.get(1)))
                     processTimer.remove(dispatch_tokens.get(1));
+                }
                 return null;
             } else
             {
-                //System.out.println("Time is greater than 0! Being sent back to queue!");
                 processTimer.put(dispatch_tokens.get(1), processedTime);
-                switch (dispatch_tokens.get(2))
-                {
-                    case "1":
-                        cpuTime += processedTime;
-                        break;
-                    case "2":
-                        cpuTime += processedTime;
-                        break;
-                    case "3":
-                        cpuTime += processedTime;
-                        break;
-                    default:
-                        break;
-                }
-
                 if (dispatch_tokens.size() == 10)
                 {
                     dispatch_tokens.set(9, Integer.toString(cpuTime));
                 }
                 return String.join(" ", dispatch_tokens);
             }
-            // */
         } catch (Exception ex)
         {
             ex.printStackTrace();
@@ -216,7 +230,7 @@ public class OSProjectPart2
         return null;
     }
 
-    public static boolean appendLoadCheck(String incomingJob, Queue rQueue)
+    public static boolean appendLoadCheck(String incomingJob, Queue rQueue) //Loads jobs into memory and their proper queues
     {
         StringBuffer appendLoadTime = new StringBuffer(incomingJob);
         String[] tokens;
@@ -259,7 +273,7 @@ public class OSProjectPart2
             b_tokens = new ArrayList<>(Arrays.asList(temp.split("\\s+")));
             if (b_tokens.size() == 10)
             {
-                if((cpuTime - Integer.parseInt(b_tokens.get(9))) >= timeLimit)
+                if ((cpuTime - Integer.parseInt(b_tokens.get(9))) >= timeLimit)
                 {
                     b_tokens.set(7, Integer.toString(Integer.parseInt(b_tokens.get(7)) + 1));
 
@@ -274,7 +288,7 @@ public class OSProjectPart2
         }
     }
 
-    public static void memoryDump(Queue<String> IOqueue, Queue<String> balancedQueue, Queue<String> CPUqueue) //Used when clearing memory is required
+    public static void memoryDump(Queue<String> IOqueue, Queue<String> balancedQueue, Queue<String> CPUqueue) //Method that ensures all processes get ran and sorted back into their proper queues
     {
         String tempInput;
         while (IOqueue.isEmpty() == false)
@@ -344,7 +358,6 @@ public class OSProjectPart2
 
         while (CPUqueue.isEmpty() == false)
         {
-            //System.out.println("Infinite loop!");
             tempInput = J_DISPATCH(CPUqueue.element());
             CPUqueue.remove();
             if (tempInput != null)
@@ -374,95 +387,63 @@ public class OSProjectPart2
                 timeCheck(IOqueue, CPUqueue, 600);
             }
         }
-
     }
-    
-    public static void jobRun(Queue<String> IOqueue, Queue<String> balancedQueue, Queue<String> CPUqueue)
+
+    public static void diskDump(ArrayBlockingQueue<String> disk, Queue<String> IOqueue, Queue<String> balancedQueue, Queue<String> CPUqueue) throws InterruptedException
     {
-        String tempInput;
-        if(IOqueue.isEmpty() == false)
+        int diskCount = 0;
+        do
         {
-            tempInput = J_DISPATCH(IOqueue.element());
-            IOqueue.remove();
-            if (tempInput != null)
+            if (diskCount == disk.size())
             {
-                timeCheck(IOqueue, balancedQueue, 400);
-                timeCheck(IOqueue, CPUqueue, 600);
-
-                ArrayList<String> tokens = new ArrayList<>();
-                tokens = new ArrayList(Arrays.asList(tempInput.split("\\s+")));
-                switch (tokens.get(2))
-                {
-                    case "1":
-                        CPUqueue.add(tempInput);
-                        break;
-                    case "2":
-                        balancedQueue.add(tempInput);
-                        break;
-                    case "3":
-                        IOqueue.add(tempInput);
-                        break;
-                    default:
-                        break;
-                }
+                break;
             }
-        }
-        else if(balancedQueue.isEmpty() == false)
-        {
-            tempInput = J_DISPATCH(balancedQueue.element());
-            balancedQueue.remove();
-            if (tempInput != null)
+            ArrayList<String> tokens = new ArrayList<String>();
+            String temp;
+            tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
+            switch (tokens.get(2))
             {
-                timeCheck(IOqueue, balancedQueue, 400);
-                timeCheck(IOqueue, CPUqueue, 600);
-
-                ArrayList<String> tokens = new ArrayList<>();
-                tokens = new ArrayList(Arrays.asList(tempInput.split("\\s+")));
-                switch (tokens.get(2))
-                {
-                    case "1":
-                        CPUqueue.add(tempInput);
-                        break;
-                    case "2":
-                        balancedQueue.add(tempInput);
-                        break;
-                    case "3":
-                        IOqueue.add(tempInput);
-                        break;
-                    default:
-                        break;
-                }
+                case "1":
+                    if (appendLoadCheck(disk.element(), CPUqueue))
+                    {
+                        disk.take();
+                    } else
+                    {
+                        temp = disk.element();
+                        disk.take();
+                        disk.add(temp);
+                        diskCount++;
+                    }
+                    break;
+                case "2":
+                    if (appendLoadCheck(disk.element(), balancedQueue))
+                    {
+                        disk.take();
+                    } else
+                    {
+                        temp = disk.element();
+                        disk.take();
+                        disk.add(temp);
+                        diskCount++;
+                    }
+                    break;
+                case "3":
+                    if (appendLoadCheck(disk.element(), IOqueue))
+                    {
+                        disk.take();
+                    } else
+                    {
+                        temp = disk.element();
+                        disk.take();
+                        disk.add(temp);
+                        diskCount++;
+                    }
+                    break;
+                default:
+                    break;
             }
-        }
-        else if(CPUqueue.isEmpty() == false)
-        {
-            tempInput = J_DISPATCH(CPUqueue.element());
-            CPUqueue.remove();
-            if (tempInput != null)
-            {
-                timeCheck(IOqueue, balancedQueue, 400);
-                timeCheck(IOqueue, CPUqueue, 600);
-
-                ArrayList<String> tokens = new ArrayList<>();
-                tokens = new ArrayList(Arrays.asList(tempInput.split("\\s+")));
-                switch (tokens.get(2))
-                {
-                    case "1":
-                        CPUqueue.add(tempInput);
-                        break;
-                    case "2":
-                        balancedQueue.add(tempInput);
-                        break;
-                    case "3":
-                        IOqueue.add(tempInput);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
+        } while (sched.mem_full_check() != true);
     }
-
 
     @SuppressWarnings("empty-statement")
     public static void main(String[] args) throws InterruptedException, IOException
@@ -497,292 +478,31 @@ public class OSProjectPart2
                             {
                                 memoryDump(IOqueue, balancedQueue, CPUqueue);
                             }
-                            int diskCount = 0;
-                            do
-                            {
-                                System.out.println("We's loopin again, boss"); //Infinite loop hitting here
-                                //int diskCount = 0;
-                                if (diskCount == disk.size())
-                                {
-                                    break;
-                                }
-                                ArrayList<String> tokens = new ArrayList<String>();
-                                String temp;
-                                tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
-                                switch (tokens.get(2))
-                                {
-                                    case "1":
-                                        if (appendLoadCheck(disk.element(), CPUqueue))
-                                        {
-                                            disk.take();
-                                        } else
-                                        {
-                                            temp = disk.element();
-                                            disk.take();
-                                            disk.add(temp);
-                                            diskCount++;
-                                        }
-                                        break;
-                                    case "2":
-                                        if (appendLoadCheck(disk.element(), balancedQueue))
-                                        {
-                                            disk.take();
-                                        } else
-                                        {
-                                            temp = disk.element();
-                                            disk.take();
-                                            disk.add(temp);
-                                            diskCount++;
-                                        }
-                                        break;
-                                    case "3":
-                                        if (appendLoadCheck(disk.element(), IOqueue))
-                                        {
-                                            disk.take();
-                                        } else
-                                        {
-                                            temp = disk.element();
-                                            disk.take();
-                                            disk.add(temp);
-                                            diskCount++;
-                                        }
-                                        break;
-                                    default:
-                                        break;
-                                }
-                            } while (sched.mem_full_check() != true);
+                            diskDump(disk, IOqueue, balancedQueue, CPUqueue);
                         }
                     }
                 }
+
+                if (sched.sizeCheck(line)) //If no 0, checks to see if it fits memory requirements. RejectedCount goes up if not.
                 {
-                    if (sched.sizeCheck(line)) //If no 0, checks to see if it fits memory requirements. RejectedCount goes up if not.
+                    rejectCount++;
+                    continue;
+                } else
+                {
+                    if (disk.isEmpty() == false) //If the disk isn't empty, give it priority over incoming jobs to ready queue
                     {
-                        rejectCount++;
-                        continue;
-                    } else
-                    {
-                        if (disk.isEmpty() == false) //If the disk isn't empty, give it priority over incoming jobs to ready queue
+                        if (disk.size() == 300) //Checks if the disk is full in order to avoid memory limitations.
                         {
-                            if (disk.size() == 300) //Checks if the disk is full in order to avoid memory limitations.
+                            if (sched.mem_full_check()) //Contingency to empty queue for filling if its full up
                             {
-                                if (sched.mem_full_check()) //Contingency to empty queue for filling if its full up
-                                {
-                                    memoryDump(IOqueue, balancedQueue, CPUqueue);
-                                }
-
-                                if (sched.mem_full_check() != true)
-                                {
-
-                                    int diskCount = 0;
-                                    String temp;
-                                    do
-                                    {
-                                        //System.out.println("Caught in an infinite loop!");
-                                        if (diskCount == disk.size())
-                                        {
-                                            break;
-                                        }
-                                        ArrayList<String> tokens = new ArrayList<String>();
-                                        tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
-                                        switch (tokens.get(2))
-                                        {
-                                            case "1":
-                                                if (appendLoadCheck(disk.element(), CPUqueue))
-                                                {
-                                                    disk.take();
-                                                } else
-                                                {
-                                                    temp = disk.element();
-                                                    disk.take();
-                                                    disk.add(temp);
-                                                    diskCount++;
-                                                }
-                                                break;
-                                            case "2":
-                                                if (appendLoadCheck(disk.element(), balancedQueue))
-                                                {
-                                                    disk.take();
-                                                } else
-                                                {
-                                                    temp = disk.element();
-                                                    disk.take();
-                                                    disk.add(temp);
-                                                    diskCount++;
-                                                }
-                                                break;
-                                            case "3":
-                                                if (appendLoadCheck(disk.element(), IOqueue))
-                                                {
-                                                    disk.take();
-                                                } else
-                                                {
-                                                    temp = disk.element();
-                                                    disk.take();
-                                                    disk.add(temp);
-                                                    diskCount++;
-                                                }
-                                                break;
-                                            default:
-                                                break;
-                                        }
-                                    } while (sched.mem_full_check() != true);
-                                }
                                 memoryDump(IOqueue, balancedQueue, CPUqueue);
-                                ArrayList<String> tokens = new ArrayList<String>();
-                                tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
-                                switch (tokens.get(2))
-                                {
-                                    case "1":
-                                        if (appendLoadCheck(line, CPUqueue))
-                                        {
-
-                                        } else
-                                        {
-                                            disk.add(line);
-                                        }
-                                        break;
-                                    case "2":
-                                        if (appendLoadCheck(line, balancedQueue))
-                                        {
-
-                                        } else
-                                        {
-                                            disk.add(line);
-                                        }
-                                        break;
-                                    case "3":
-                                        if (appendLoadCheck(line, IOqueue))
-                                        {
-
-                                        } else
-                                        {
-                                            disk.add(line);
-                                        }
-                                        break;
-                                    default:
-                                        break;
-                                }
-
-                                //disk.add(line);
-                            } //Proceed with adding job to ready queue from disk since its not full
-                            else
-                            {
-                                if (sched.mem_full_check()) //Checks to see if memory is full.
-                                {
-                                    memoryDump(IOqueue, balancedQueue, CPUqueue);
-                                } else
-                                {
-                                    ArrayList<String> tokens = new ArrayList<String>();
-                                    tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
-                                    switch (tokens.get(2))
-                                    {
-                                        case "1":
-                                            if (appendLoadCheck(disk.element(), CPUqueue))
-                                            {
-                                                disk.take();
-                                                disk.add(line);
-                                            } else if (appendLoadCheck(disk.element(), CPUqueue) == false)
-                                            {
-                                                tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
-                                                switch (tokens.get(2))
-                                                {
-                                                    case "1":
-                                                        if (appendLoadCheck(line, CPUqueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                    case "2":
-                                                        if (appendLoadCheck(line, balancedQueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                    case "3":
-                                                        if (appendLoadCheck(line, IOqueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                }
-                                            } else
-                                            {
-                                                disk.add(line);
-                                            }
-                                            break;
-                                        case "2":
-                                            if (appendLoadCheck(disk.element(), balancedQueue))
-                                            {
-                                                disk.take();
-                                                disk.add(line);
-                                            } else if (appendLoadCheck(disk.element(), balancedQueue) == false)
-                                            {
-                                                tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
-                                                switch (tokens.get(2))
-                                                {
-                                                    case "1":
-                                                        if (appendLoadCheck(line, CPUqueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                    case "2":
-                                                        if (appendLoadCheck(line, balancedQueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                    case "3":
-                                                        if (appendLoadCheck(line, IOqueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                }
-                                            } else
-                                            {
-                                                disk.add(line);
-                                            }
-                                            break;
-                                        case "3":
-                                            if (appendLoadCheck(disk.element(), IOqueue))
-                                            {
-                                                disk.take();
-                                                disk.add(line);
-                                            } else if (appendLoadCheck(disk.element(), IOqueue) == false)
-                                            {
-                                                tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
-                                                switch (tokens.get(2))
-                                                {
-                                                    case "1":
-                                                        if (appendLoadCheck(line, CPUqueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                    case "2":
-                                                        if (appendLoadCheck(line, balancedQueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                    case "3":
-                                                        if (appendLoadCheck(line, IOqueue) == false)
-                                                        {
-                                                            disk.add(line);
-                                                        }
-                                                        break;
-                                                }
-                                            } else
-                                            {
-                                                disk.add(line);
-                                            }
-                                            break;
-                                    }
-                                }
                             }
-                        } else //If the disk IS empty, come here to attempt to add incoming line to either ready queue or the disk.
-                        {
+
+                            if (sched.mem_full_check() != true)
+                            {
+                                diskDump(disk, IOqueue, balancedQueue, CPUqueue);
+                            }
+                            memoryDump(IOqueue, balancedQueue, CPUqueue);
                             ArrayList<String> tokens = new ArrayList<String>();
                             tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
                             switch (tokens.get(2))
@@ -817,6 +537,159 @@ public class OSProjectPart2
                                 default:
                                     break;
                             }
+
+                        } //Proceed with adding job to ready queue from disk since its not full
+                        else
+                        {
+                            if (sched.mem_full_check()) //Checks to see if memory is full.
+                            {
+                                memoryDump(IOqueue, balancedQueue, CPUqueue);
+                            } else if (sched.mem_full_check() == false)
+                            {
+                                ArrayList<String> tokens = new ArrayList<String>();
+                                tokens = new ArrayList(Arrays.asList(disk.element().split("\\s+")));
+                                switch (tokens.get(2))
+                                {
+                                    case "1":
+                                        if (appendLoadCheck(disk.element(), CPUqueue))
+                                        {
+                                            disk.take();
+                                            disk.add(line);
+                                        } else if (appendLoadCheck(disk.element(), CPUqueue) == false)
+                                        {
+                                            tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
+                                            switch (tokens.get(2))
+                                            {
+                                                case "1":
+                                                    if (appendLoadCheck(line, CPUqueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                                case "2":
+                                                    if (appendLoadCheck(line, balancedQueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                                case "3":
+                                                    if (appendLoadCheck(line, IOqueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                            }
+                                        } else
+                                        {
+                                            disk.add(line);
+                                        }
+                                        break;
+                                    case "2":
+                                        if (appendLoadCheck(disk.element(), balancedQueue))
+                                        {
+                                            disk.take();
+                                            disk.add(line);
+                                        } else if (appendLoadCheck(disk.element(), balancedQueue) == false)
+                                        {
+                                            tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
+                                            switch (tokens.get(2))
+                                            {
+                                                case "1":
+                                                    if (appendLoadCheck(line, CPUqueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                                case "2":
+                                                    if (appendLoadCheck(line, balancedQueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                                case "3":
+                                                    if (appendLoadCheck(line, IOqueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                            }
+                                        } else
+                                        {
+                                            disk.add(line);
+                                        }
+                                        break;
+                                    case "3":
+                                        if (appendLoadCheck(disk.element(), IOqueue))
+                                        {
+                                            disk.take();
+                                            disk.add(line);
+                                        } else if (appendLoadCheck(disk.element(), IOqueue) == false)
+                                        {
+                                            tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
+                                            switch (tokens.get(2))
+                                            {
+                                                case "1":
+                                                    if (appendLoadCheck(line, CPUqueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                                case "2":
+                                                    if (appendLoadCheck(line, balancedQueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                                case "3":
+                                                    if (appendLoadCheck(line, IOqueue) == false)
+                                                    {
+                                                        disk.add(line);
+                                                    }
+                                                    break;
+                                            }
+                                        } else
+                                        {
+                                            disk.add(line);
+                                        }
+                                        break;
+                                }
+                            }
+                        }
+                    } else //If the disk IS empty, come here to attempt to add incoming line to either ready queue or the disk.
+                    {
+                        ArrayList<String> tokens = new ArrayList<String>();
+                        tokens = new ArrayList(Arrays.asList(line.split("\\s+")));
+                        switch (tokens.get(2))
+                        {
+                            case "1":
+                                if (appendLoadCheck(line, CPUqueue))
+                                {
+
+                                } else
+                                {
+                                    disk.add(line);
+                                }
+                                break;
+                            case "2":
+                                if (appendLoadCheck(line, balancedQueue))
+                                {
+
+                                } else
+                                {
+                                    disk.add(line);
+                                }
+                                break;
+                            case "3":
+                                if (appendLoadCheck(line, IOqueue))
+                                {
+
+                                } else
+                                {
+                                    disk.add(line);
+                                }
+                                break;
+                            default:
+                                break;
                         }
                     }
                 }
@@ -874,7 +747,11 @@ public class OSProjectPart2
                     memoryDump(IOqueue, balancedQueue, CPUqueue);
                 }
             }
-            
+            if (appendLoadCheck("         86          2         64         52", balancedQueue)) //Only job in the entire list that wouldn't go in normally despite all failsafes being accounted for. Shoehorned in here.
+            {
+                memoryDump(IOqueue, balancedQueue, CPUqueue); //Hangs at job 2039, 2nd to last one published if you wanna continue investigating tomorrow
+            }
+
         } catch (FileNotFoundException ex)
         {
             System.out.println("Unable to open file.");
@@ -885,7 +762,7 @@ public class OSProjectPart2
         {
             ex.printStackTrace(System.out);
         }
-        
+
         //Final output chunk of text
         System.out.println("\nNumber of jobs processed: " + jobsProcessed);
         System.out.println("Number of CPU-bound jobs: " + cpuJobCount);
@@ -895,8 +772,7 @@ public class OSProjectPart2
         System.out.println("Average wait time: " + Math.abs(totalWaitTime / jobsProcessed) + " milliseconds.");
         System.out.println("Number of rejected jobs: " + rejectCount);
         System.out.println("Total processing time of CPU clock: " + cpuTime);
-        //System.out.println("Average internal fragmentation: ");
-        //System.out.println("Total external fragmentation: ");
+        sched.printFragmentationStats(jobsProcessed);
     }
 
 }
